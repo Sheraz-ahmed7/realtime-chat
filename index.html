@@ -1,0 +1,906 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Group Chat</title>
+
+    <script src="/socket.io/socket.io.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #eef2f7;
+            color: #1f2937;
+            min-height: 100vh;
+        }
+
+        button, input {
+            font: inherit;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #loginScreen {
+            width: min(420px, 92%);
+            margin: 100px auto;
+            padding: 32px;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 8px 30px #00000012;
+            text-align: center;
+        }
+
+        #loginScreen h1 {
+            margin-bottom: 10px;
+        }
+
+        #loginScreen p {
+            color: #64748b;
+            margin-bottom: 22px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #2563eb;
+        }
+
+        .primary-button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+
+        .primary-button:hover {
+            background: #1d4ed8;
+        }
+
+        #loginButton {
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        #app {
+            display: flex;
+            width: min(1200px, 96%);
+            height: min(760px, 92vh);
+            margin: 4vh auto;
+            background: white;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 8px 30px #00000012;
+        }
+
+        .sidebar {
+            width: 300px;
+            min-width: 260px;
+            background: #f8fafc;
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background: #1e293b;
+            color: white;
+        }
+
+        .sidebar-header h2 {
+            margin-bottom: 8px;
+        }
+
+        .sidebar-header p {
+            color: #cbd5e1;
+            font-size: 13px;
+        }
+
+        .group-create {
+            display: flex;
+            gap: 8px;
+            padding: 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .group-create input {
+            min-width: 0;
+        }
+
+        .group-create button {
+            border: none;
+            background: #2563eb;
+            color: white;
+            border-radius: 8px;
+            padding: 0 13px;
+        }
+
+        .group-section {
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .group-section h3 {
+            font-size: 13px;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .group-list {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .group-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 11px;
+            border-radius: 8px;
+            background: white;
+            border: 1px solid #e2e8f0;
+        }
+
+        .group-item.active {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+
+        .group-info {
+            min-width: 0;
+        }
+
+        .group-name {
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+
+        .group-count {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .group-action {
+            border: none;
+            border-radius: 6px;
+            padding: 7px 10px;
+            background: #2563eb;
+            color: white;
+            white-space: nowrap;
+        }
+
+        .group-action.leave {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .empty-list {
+            color: #94a3b8;
+            font-size: 13px;
+            padding: 8px 0;
+        }
+
+        .chat-area {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            min-height: 76px;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-header h2 {
+            font-size: 19px;
+        }
+
+        .chat-header p {
+            color: #64748b;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        #leaveButton {
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            background: white;
+            border-radius: 8px;
+            padding: 9px 12px;
+        }
+
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #f8fafc;
+        }
+
+        .message {
+            max-width: 75%;
+            padding: 11px 14px;
+            border-radius: 12px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            align-self: flex-start;
+            overflow-wrap: anywhere;
+        }
+
+        .message.own {
+            align-self: flex-end;
+            background: #dbeafe;
+            border-color: #bfdbfe;
+        }
+
+        .message-user {
+            font-size: 12px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 5px;
+        }
+
+        .message-text {
+            line-height: 1.4;
+            white-space: pre-wrap;
+        }
+
+        .message-time {
+            font-size: 10px;
+            color: #64748b;
+            text-align: right;
+            margin-top: 6px;
+        }
+
+        .system-message {
+            align-self: center;
+            color: #64748b;
+            font-size: 12px;
+            text-align: center;
+            padding: 5px 10px;
+        }
+
+        #typingIndicator {
+            min-height: 22px;
+            padding: 2px 20px;
+            color: #64748b;
+            font-size: 12px;
+            background: #f8fafc;
+        }
+
+        .message-form {
+            display: flex;
+            gap: 10px;
+            padding: 15px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .message-form input {
+            flex: 1;
+        }
+
+        .message-form button {
+            border: none;
+            background: #2563eb;
+            color: white;
+            border-radius: 8px;
+            padding: 0 20px;
+        }
+
+        .message-form button:disabled,
+        .message-form input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #appError {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #991b1b;
+            color: white;
+            padding: 12px 18px;
+            border-radius: 8px;
+            max-width: 90%;
+            text-align: center;
+            z-index: 10;
+        }
+
+        @media (max-width: 700px) {
+            #app {
+                width: 100%;
+                height: 100vh;
+                margin: 0;
+                border-radius: 0;
+            }
+
+            .sidebar {
+                width: 42%;
+                min-width: 135px;
+            }
+
+            .sidebar-header,
+            .group-section {
+                padding: 12px;
+            }
+
+            .group-create {
+                padding: 8px;
+                flex-direction: column;
+            }
+
+            .group-create button {
+                padding: 10px;
+            }
+
+            .group-item {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .chat-header {
+                padding: 12px;
+            }
+
+            .chat-header h2 {
+                font-size: 16px;
+            }
+
+            .message {
+                max-width: 90%;
+            }
+
+            .message-form {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <section id="loginScreen">
+        <h1>Group Chat</h1>
+        <p>Enter your username to start chatting.</p>
+
+        <input
+            type="text"
+            id="usernameInput"
+            maxlength="20"
+            placeholder="Your username"
+            autocomplete="off"
+        >
+
+        <button id="loginButton" class="primary-button">
+            Join Chat
+        </button>
+    </section>
+
+    <main id="app" class="hidden">
+
+        <aside class="sidebar">
+
+            <div class="sidebar-header">
+                <h2>Chat Rooms</h2>
+                <p id="userInfo">Welcome</p>
+                <p id="onlineCount">Online users: 0</p>
+            </div>
+
+            <form id="createGroupForm" class="group-create">
+                <input
+                    type="text"
+                    id="groupNameInput"
+                    maxlength="30"
+                    placeholder="New group name"
+                    autocomplete="off"
+                >
+                <button type="submit">Create</button>
+            </form>
+
+            <section class="group-section">
+                <h3>My Groups</h3>
+                <div id="myGroups" class="group-list">
+                    <p class="empty-list">You haven't joined any groups.</p>
+                </div>
+            </section>
+
+            <section class="group-section">
+                <h3>Discover Groups</h3>
+                <div id="availableGroups" class="group-list">
+                    <p class="empty-list">No groups available.</p>
+                </div>
+            </section>
+
+        </aside>
+
+        <section class="chat-area">
+
+            <header class="chat-header">
+                <div>
+                    <h2 id="currentGroupName">Select a group</h2>
+                    <p id="currentGroupInfo">Create or join a group to start.</p>
+                </div>
+
+                <button id="leaveButton" class="hidden">
+                    Leave Group
+                </button>
+            </header>
+
+            <div id="messages">
+                <p class="system-message">
+                    Welcome! Create a group or join an existing group.
+                </p>
+            </div>
+
+            <div id="typingIndicator"></div>
+
+            <form id="messageForm" class="message-form">
+                <input
+                    type="text"
+                    id="messageInput"
+                    placeholder="Select a group first..."
+                    maxlength="500"
+                    autocomplete="off"
+                    disabled
+                >
+
+                <button id="sendButton" type="submit" disabled>
+                    Send
+                </button>
+            </form>
+
+        </section>
+    </main>
+
+    <div id="appError" class="hidden"></div>
+
+    <script>
+        const socket = io();
+
+        let userId = localStorage.getItem("chatUserId");
+        if (!userId) {
+            userId = crypto.randomUUID();
+            localStorage.setItem("chatUserId", userId);
+        }
+
+        const loginScreen = document.getElementById("loginScreen");
+        const app = document.getElementById("app");
+        const usernameInput = document.getElementById("usernameInput");
+        const loginButton = document.getElementById("loginButton");
+
+        const userInfo = document.getElementById("userInfo");
+        const onlineCount = document.getElementById("onlineCount");
+
+        const createGroupForm = document.getElementById("createGroupForm");
+        const groupNameInput = document.getElementById("groupNameInput");
+        const myGroupsContainer = document.getElementById("myGroups");
+        const availableGroupsContainer = document.getElementById("availableGroups");
+
+        const currentGroupName = document.getElementById("currentGroupName");
+        const currentGroupInfo = document.getElementById("currentGroupInfo");
+        const leaveButton = document.getElementById("leaveButton");
+
+        const messages = document.getElementById("messages");
+        const messageForm = document.getElementById("messageForm");
+        const messageInput = document.getElementById("messageInput");
+        const sendButton = document.getElementById("sendButton");
+        const typingIndicator = document.getElementById("typingIndicator");
+        const appError = document.getElementById("appError");
+
+        let username = "";
+        let myGroups = [];
+        let allGroups = [];
+        let activeGroupId = null;
+        let typingTimeout = null;
+        let errorTimeout = null;
+
+        const messagesByGroup = new Map();
+
+        function showError(message) {
+            appError.textContent = message;
+            appError.classList.remove("hidden");
+
+            clearTimeout(errorTimeout);
+
+            errorTimeout = setTimeout(() => {
+                appError.classList.add("hidden");
+            }, 3500);
+        }
+
+        function showSystemMessage(message) {
+            const element = document.createElement("p");
+            element.className = "system-message";
+            element.textContent = message;
+            messages.appendChild(element);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function formatTime(dateString) {
+            return new Date(dateString).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        function addMessage(data) {
+            if (!messagesByGroup.has(data.groupId)) {
+                messagesByGroup.set(data.groupId, []);
+            }
+
+            messagesByGroup.get(data.groupId).push(data);
+
+            if (data.groupId === activeGroupId) {
+                renderMessages();
+            }
+        }
+
+        function renderMessages() {
+            messages.innerHTML = "";
+
+            const groupMessages = messagesByGroup.get(activeGroupId) || [];
+
+            if (groupMessages.length === 0) {
+                showSystemMessage("No messages yet. Start the conversation!");
+                return;
+            }
+
+            groupMessages.forEach(data => {
+                const messageElement = document.createElement("div");
+
+                messageElement.className =
+                    data.senderId === userId
+                        ? "message own"
+                        : "message";
+
+                const userElement = document.createElement("div");
+                userElement.className = "message-user";
+                userElement.textContent = data.username;
+
+                const textElement = document.createElement("div");
+                textElement.className = "message-text";
+                textElement.textContent = data.message;
+
+                const timeElement = document.createElement("div");
+                timeElement.className = "message-time";
+                timeElement.textContent = formatTime(data.time);
+
+                messageElement.append(userElement, textElement, timeElement);
+                messages.appendChild(messageElement);
+            });
+
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function selectGroup(groupId) {
+            const group = myGroups.find(item => item.id === groupId);
+
+            if (!group) return;
+
+            activeGroupId = groupId;
+            socket.emit("get group history", groupId);
+
+            currentGroupName.textContent = group.name;
+            currentGroupInfo.textContent =
+                `${group.memberCount} member(s)`;
+
+            leaveButton.classList.remove("hidden");
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+            messageInput.placeholder = `Message ${group.name}...`;
+
+            typingIndicator.textContent = "";
+
+            renderMessages();
+            renderGroups();
+        }
+
+        function createGroupItem(group, isMember) {
+            const item = document.createElement("div");
+            item.className = "group-item";
+
+            if (group.id === activeGroupId) {
+                item.classList.add("active");
+            }
+
+            const info = document.createElement("div");
+            info.className = "group-info";
+
+            const name = document.createElement("div");
+            name.className = "group-name";
+            name.textContent = group.name;
+
+            const count = document.createElement("div");
+            count.className = "group-count";
+            count.textContent = `${group.memberCount} member(s)`;
+
+            info.append(name, count);
+
+            const button = document.createElement("button");
+            button.className = "group-action";
+            button.type = "button";
+
+            if (isMember) {
+                button.textContent = "Open";
+                button.addEventListener("click", () => {
+                    selectGroup(group.id);
+                });
+            } else {
+                button.textContent = "Join";
+                button.addEventListener("click", () => {
+                    socket.emit("join group", group.id);
+                });
+            }
+
+            item.append(info, button);
+            return item;
+        }
+
+        function renderGroups() {
+            myGroupsContainer.innerHTML = "";
+            availableGroupsContainer.innerHTML = "";
+
+            if (myGroups.length === 0) {
+                const empty = document.createElement("p");
+                empty.className = "empty-list";
+                empty.textContent = "You haven't joined any groups.";
+                myGroupsContainer.appendChild(empty);
+            }
+
+            myGroups.forEach(group => {
+                myGroupsContainer.appendChild(
+                    createGroupItem(group, true)
+                );
+            });
+
+            const available = allGroups.filter(
+                group => !myGroups.some(myGroup => myGroup.id === group.id)
+            );
+
+            if (available.length === 0) {
+                const empty = document.createElement("p");
+                empty.className = "empty-list";
+                empty.textContent = "No other groups available.";
+                availableGroupsContainer.appendChild(empty);
+            }
+
+            available.forEach(group => {
+                availableGroupsContainer.appendChild(
+                    createGroupItem(group, false)
+                );
+            });
+        }
+
+        function updateActiveGroupDetails() {
+            if (!activeGroupId) return;
+
+            const group = myGroups.find(item => item.id === activeGroupId);
+
+            if (group) {
+                currentGroupInfo.textContent =
+                    `${group.memberCount} member(s)`;
+            }
+        }
+
+        loginButton.addEventListener("click", () => {
+            const enteredName = usernameInput.value.trim();
+
+            if (!enteredName) {
+                showError("Please enter your username.");
+                return;
+            }
+
+            username = enteredName.slice(0, 20);
+            socket.emit("join chat", { username, userId });
+        });
+
+        usernameInput.addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                loginButton.click();
+            }
+        });
+
+        socket.on("join success", (name) => {
+            username = name;
+            userInfo.textContent = `Logged in as ${username}`;
+
+            loginScreen.classList.add("hidden");
+            app.classList.remove("hidden");
+        });
+
+        createGroupForm.addEventListener("submit", event => {
+            event.preventDefault();
+
+            const groupName = groupNameInput.value.trim();
+
+            if (!groupName) {
+                showError("Enter a group name first.");
+                return;
+            }
+
+            socket.emit("create group", groupName);
+            groupNameInput.value = "";
+        });
+
+        socket.on("groups update", groups => {
+            allGroups = groups;
+            renderGroups();
+        });
+
+        socket.on("my groups", groups => {
+            myGroups = groups;
+
+            if (
+                activeGroupId &&
+                !myGroups.some(group => group.id === activeGroupId)
+            ) {
+                activeGroupId = null;
+                resetChatArea();
+            }
+
+            renderGroups();
+            updateActiveGroupDetails();
+        });
+
+        socket.on("group joined", group => {
+            const existingIndex = myGroups.findIndex(
+                item => item.id === group.id
+            );
+
+            if (existingIndex >= 0) {
+                myGroups[existingIndex] = group;
+            } else {
+                myGroups.push(group);
+            }
+
+            selectGroup(group.id);
+            renderGroups();
+        });
+
+        socket.on("group left", groupId => {
+            myGroups = myGroups.filter(group => group.id !== groupId);
+
+            if (activeGroupId === groupId) {
+                activeGroupId = null;
+                resetChatArea();
+            }
+
+            renderGroups();
+        });
+
+        function resetChatArea() {
+            currentGroupName.textContent = "Select a group";
+            currentGroupInfo.textContent = "Create or join a group to start.";
+            leaveButton.classList.add("hidden");
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+            messageInput.placeholder = "Select a group first...";
+            typingIndicator.textContent = "";
+            messages.innerHTML = "";
+
+            showSystemMessage("Select a group to start chatting.");
+        }
+
+        leaveButton.addEventListener("click", () => {
+            if (!activeGroupId) return;
+
+            const confirmed = confirm(
+                "Are you sure you want to leave this group?"
+            );
+
+            if (confirmed) {
+                socket.emit("leave group", activeGroupId);
+            }
+        });
+
+        messageForm.addEventListener("submit", event => {
+            event.preventDefault();
+
+            const message = messageInput.value.trim();
+
+            if (!message || !activeGroupId) return;
+
+            socket.emit("group message", {
+                groupId: activeGroupId,
+                message
+            });
+
+            messageInput.value = "";
+            socket.emit("stop typing", activeGroupId);
+        });
+
+        messageInput.addEventListener("input", () => {
+            if (!activeGroupId) return;
+
+            socket.emit("typing", activeGroupId);
+
+            clearTimeout(typingTimeout);
+
+            typingTimeout = setTimeout(() => {
+                if (activeGroupId) {
+                    socket.emit("stop typing", activeGroupId);
+                }
+            }, 1000);
+        });
+
+        socket.on("group history", data => {
+            messagesByGroup.set(data.groupId, data.messages || []);
+            if (data.groupId === activeGroupId) {
+                renderMessages();
+            }
+        });
+
+        socket.on("group message", data => {
+            addMessage(data);
+        });
+
+        socket.on("group notification", message => {
+            if (activeGroupId) {
+                showSystemMessage(message);
+            }
+        });
+
+        socket.on("user notification", message => {
+            if (activeGroupId) {
+                showSystemMessage(message);
+            }
+        });
+
+        socket.on("online users", count => {
+            onlineCount.textContent = `Online users: ${count}`;
+        });
+
+        socket.on("typing users", data => {
+            if (data.groupId !== activeGroupId) return;
+
+            const others = data.users.filter(name => name !== username);
+
+            if (others.length === 0) {
+                typingIndicator.textContent = "";
+            } else if (others.length === 1) {
+                typingIndicator.textContent = `${others[0]} is typing...`;
+            } else {
+                typingIndicator.textContent = "Several people are typing...";
+            }
+        });
+
+        socket.on("app error", message => {
+            showError(message);
+        });
+    </script>
+
+</body>
+</html>
